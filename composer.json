@@ -12,7 +12,8 @@
     "autoload": {
         "psr-4": {
             "Mooc\\Export\\": "export/",
-            "Mooc\\UI\\": "blocks/"
+            "Mooc\\UI\\": "blocks/",
+            "Mooc\\Xml\\": "xml/"
         },
         "classmap": ["controllers/","../VipsPlugin/exercises/"]
     }

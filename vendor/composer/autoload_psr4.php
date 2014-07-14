@@ -6,6 +6,7 @@ $vendorDir = dirname(dirname(__FILE__));
 $baseDir = dirname($vendorDir);
 
 return array(
+    'Mooc\\Xml\\' => array($baseDir . '/xml'),
     'Mooc\\UI\\' => array($baseDir . '/blocks'),
     'Mooc\\Export\\' => array($baseDir . '/export'),
 );

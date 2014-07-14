@@ -5,6 +5,7 @@ namespace Mooc\Export;
 use Mooc\Export\Visitor\XmlVisitor;
 use Mooc\UI\BlockFactory;
 use Mooc\UI\Courseware\Courseware;
+use Mooc\Xml\Builder;
 
 /**
  * Courseware XML export.
@@ -29,7 +30,8 @@ class XmlExport implements ExportInterface
     public function export(Courseware $courseware)
     {
         $document = new \DOMDocument('1.0', 'UTF-8');
-        $visitor = new XmlVisitor($this->blockFactory, $document);
+        $builder = new Builder($document);
+        $visitor = new XmlVisitor($this->blockFactory, $builder);
         $visitor->startVisitingCourseware($courseware);
 
         return $document;

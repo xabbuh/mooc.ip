@@ -6,6 +6,7 @@ use Mooc\DB\Block;
 use Mooc\UI\BlockFactory;
 use Mooc\UI\Courseware\Courseware;
 use Mooc\UI\Section\Section;
+use Mooc\Xml\Builder;
 
 /**
  * XML courseware visitor.
@@ -20,25 +21,14 @@ class XmlVisitor extends AbstractVisitor
     private $blockFactory;
 
     /**
-     * @var \DOMDocument
+     * @var \Mooc\Xml\Builder
      */
-    private $document;
+    private $builder;
 
-    /**
-     * @var \DOMNode[]
-     */
-    private $nodeStack = array();
-
-    /**
-     * @var \DOMNode
-     */
-    private $currentNode;
-
-    public function __construct(BlockFactory $blockFactory, \DOMDocument $document)
+    public function __construct(BlockFactory $blockFactory, Builder $builder)
     {
         $this->blockFactory = $blockFactory;
-        $this->document = $document;
-        $this->enterNode($document);
+        $this->builder = $builder;
     }
 
     /**
@@ -46,13 +36,13 @@ class XmlVisitor extends AbstractVisitor
      */
     public function startVisitingCourseware(Courseware $courseware)
     {
-        $this->enterNode($this->appendBlockNode('courseware', $courseware->title));
+        $this->builder->enterNode($this->builder->appendBlockNode('courseware', $courseware->title));
 
-        $this->addNamespace(
+        $this->builder->addNamespace(
             'http://moocip.de/schema/courseware/',
             'http://moocip.de/schema/courseware/courseware-1.0.xsd'
         );
-        $this->addNamespace(
+        $this->builder->addNamespace(
             'http://www.w3.org/2001/XMLSchema-instance',
             null,
             'xsi'
@@ -69,7 +59,7 @@ class XmlVisitor extends AbstractVisitor
      */
     public function endVisitingCourseware(Courseware $courseware)
     {
-        $this->leaveNode();
+        $this->builder->leaveNode();
     }
 
     /**
@@ -77,7 +67,7 @@ class XmlVisitor extends AbstractVisitor
      */
     public function startVisitingChapter(Block $chapter)
     {
-        $this->enterNode($this->appendBlockNode('chapter', $chapter->title));
+        $this->builder->enterNode($this->builder->appendBlockNode('chapter', $chapter->title));
 
         foreach ($chapter->children as $chapter) {
             $this->startVisitingSubChapter($chapter);
@@ -90,7 +80,7 @@ class XmlVisitor extends AbstractVisitor
      */
     public function endVisitingChapter(Block $chapter)
     {
-        $this->leaveNode();
+        $this->builder->leaveNode();
     }
 
     /**
@@ -98,7 +88,7 @@ class XmlVisitor extends AbstractVisitor
      */
     public function startVisitingSubChapter(Block $subChapter)
     {
-        $this->enterNode($this->appendBlockNode('subchapter', $subChapter->title));
+        $this->builder->enterNode($this->builder->appendBlockNode('subchapter', $subChapter->title));
 
         foreach ($subChapter->children as $block) {
             $section = $this->blockFactory->makeBlock($block);
@@ -112,7 +102,7 @@ class XmlVisitor extends AbstractVisitor
      */
     public function endVisitingSubChapter(Block $subChapter)
     {
-        $this->leaveNode();
+        $this->builder->leaveNode();
     }
 
     /**
@@ -120,8 +110,8 @@ class XmlVisitor extends AbstractVisitor
      */
     public function startVisitingSection(Section $section)
     {
-        $this->enterNode($this->appendBlockNode('section', $section->title, array(
-            $this->createAttributeNode('icon', $section->icon),
+        $this->builder->enterNode($this->builder->appendBlockNode('section', $section->title, array(
+            $this->builder->createAttributeNode('icon', $section->icon),
         )));
 
         foreach ($section->getModel()->children as $block) {
@@ -136,7 +126,7 @@ class XmlVisitor extends AbstractVisitor
      */
     public function endVisitingSection(Section $section)
     {
-        $this->leaveNode();
+        $this->builder->leaveNode();
     }
 
     /**
@@ -159,7 +149,7 @@ class XmlVisitor extends AbstractVisitor
                 $alias = substr($alias, 0, strlen($alias) - 5);
             }
 
-            $this->addNamespace($namespace, $schemaLocation, $alias);
+            $this->builder->addNamespace($namespace, $schemaLocation, $alias);
         }
 
         $properties = $block->export();
@@ -170,116 +160,9 @@ class XmlVisitor extends AbstractVisitor
                 $name = $alias.':'.$name;
             }
 
-            $attributes[] = $this->createAttributeNode($name, $value);
+            $attributes[] = $this->builder->createAttributeNode($name, $value);
         }
 
-        $this->appendBlockNode('block', $block->title, $attributes);
-    }
-
-    /**
-     * Enters a new DOM node (i. e. making it the current node).
-     *
-     * @param \DOMNode $node The node to enter
-     */
-    private function enterNode(\DOMNode $node)
-    {
-        // put current node on the backtracking stack
-        if ($this->currentNode !== null) {
-            $this->nodeStack[] = $this->currentNode;
-        }
-
-        $this->currentNode = $node;
-    }
-
-    /**
-     * Leaves the current node.
-     *
-     * @throws \RuntimeException if the current node is the XML document
-     */
-    private function leaveNode()
-    {
-        if (count($this->nodeStack) == 0) {
-            throw new \RuntimeException('Cannot leave the root node');
-        }
-
-        $this->currentNode = array_pop($this->nodeStack);
-    }
-
-    /**
-     * Introduce a new XML namespace with an optional namespace alias.
-     *
-     * @param string $namespace      The full XML namespace
-     * @param string $schemaLocation The url under which the XML schema definition
-     *                               file is located
-     * @param string $alias          An optional namespace alias (must be given
-     *                               to be able to use multiple namespaces in
-     *                               a single file)
-     */
-    private function addNamespace($namespace, $schemaLocation, $alias = null)
-    {
-        if ($alias === null) {
-            $namespaceNode = $this->createAttributeNode('xmlns', $namespace);
-        } else {
-            $namespaceNode = $this->createAttributeNode('xmlns:'.$alias, $namespace);
-        }
-
-        $rootNode =  $this->document->documentElement;
-        $rootNode->appendChild($namespaceNode);
-
-        if ($schemaLocation === null) {
-            return;
-        }
-
-        if ($rootNode->hasAttribute('xsi:schemaLocation')) {
-            $attributeNode = $rootNode->getAttributeNode('xsi:schemaLocation');
-        } else {
-            $attributeNode = $this->createAttributeNode('xsi:schemaLocation', '');
-        }
-
-        $attributeNode->value = trim($attributeNode->value).' '.$namespace.' '.$schemaLocation;
-
-        $this->document->documentElement->appendChild($attributeNode);
-    }
-
-    /**
-     * Appends a new block node to the current node.
-     *
-     * @param string $elementName The element name
-     * @param string $title       The block title
-     * @param array  $attributes  Element attributes
-     *
-     * @return \DOMElement The new element
-     */
-    private function appendBlockNode($elementName, $title = null, array $attributes = array())
-    {
-        $element = $this->document->createElement($elementName);
-
-        if ($title !== null) {
-            $element->appendChild($this->createAttributeNode('title', $title));
-        }
-
-        foreach ($attributes as $attribute) {
-            $element->appendChild($attribute);
-        }
-
-        $this->currentNode->appendChild($element);
-
-        return $element;
-    }
-
-    /**
-     * Creates a new DOM XML attribute.
-     *
-     * @param string $name  Attribute name
-     * @param string $value Attribute value
-     *
-     * @return \DOMAttr Attribute node
-     */
-    private function createAttributeNode($name, $value)
-    {
-        $attribute = $this->document->createAttribute($name);
-        $attribute->value = utf8_encode($value);
-
-        return $attribute;
+        $this->builder->appendBlockNode('block', $block->title, $attributes);
     }
 }
